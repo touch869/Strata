@@ -3231,7 +3231,11 @@ class PromptProgress(unittest.TestCase):
                           {"total": self.TOTAL, "cache": 4096, "processed": 16384, "time_ms": 4400},
                           {"total": self.TOTAL, "cache": 4096, "processed": 24576, "time_ms": 6600}],
                          "llama.cpp's four fields, time_ms elapsed since the read started")
-        self.assertTrue(all(s["choices"][0]["delta"] == {} for s in steps), "a progress chunk carries no content")
+        self.assertTrue(all(s["choices"][0]["delta"].get("content", "") == "" for s in steps),
+                        "a progress chunk carries no content")
+        self.assertTrue(all(s["choices"][0]["delta"].get("provider_specific_fields") == {"strata_keepalive": True}
+                            for s in steps),
+                        "a progress chunk is a real data chunk, so a gateway waiting for the first chunk sends headers")
 
     def test_a_client_that_does_not_ask_gets_nothing(self):
         text = self.stream()

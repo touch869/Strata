@@ -7309,10 +7309,22 @@ def openai_chunks(svc: Service, req: dict, ids, thinking, tools, max_new, cancel
     for kind, x in run if run is not None else svc.run(ids, thinking, tools, max_new, req, cancel, force=force, declared_only=True):
         born = getattr(svc.engine, "gen", born)
         if kind == "ping":
-            # a PP line: the prompt is being read and there is nothing to say yet.  It used to be only the SSE comment;
-            # now it carries the progress when the client asked, and stays the comment when there is nothing to report.
+            # A PP line: the prompt is being read and there is nothing to say yet.  A
+            # client that asked for progress gets a real data chunk, even
+            # when there is no PP line to report: a gateway such as litellm waits for
+            # the first data chunk before it sends its response headers and drops SSE
+            # comments, so a comment alone would leave it waiting through a long
+            # queue/prefill.  Clients that did not ask still get the comment.
             pp = prompt_progress(svc) if want_progress else None
-            yield None if pp is None else {**chunk({}), "prompt_progress": pp}
+            if want_progress:
+                # provider_specific_fields makes the chunk non-empty for gateways that
+                # drop empty deltas (litellm's is_chunk_non_empty); generic clients ignore it.
+                c = chunk({"provider_specific_fields": {"strata_keepalive": True}})
+                if pp is not None:
+                    c["prompt_progress"] = pp
+                yield c
+            else:
+                yield None
         elif kind == "mcp":
             c = chunk({})
             c["strata_mcp"] = x
